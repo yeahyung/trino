@@ -85,9 +85,10 @@ public final class DeltaLakeSchemaSupport
     public static final String COLUMN_MAPPING_MODE_CONFIGURATION_KEY = "delta.columnMapping.mode";
 
     // https://github.com/delta-io/delta/blob/master/PROTOCOL.md#valid-feature-names-in-table-features
-    // TODO: Add support for 'deletionVectors' and 'timestampNTZ' reader features
+    // TODO: Add support for 'timestampNTZ' reader features
     private static final Set<String> SUPPORTED_READER_FEATURES = ImmutableSet.<String>builder()
             .add("columnMapping")
+            .add("deletionVectors")
             .build();
 
     public enum ColumnMappingMode

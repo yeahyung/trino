@@ -13,6 +13,7 @@
  */
 package io.trino.plugin.deltalake;
 
+import com.google.common.base.Suppliers;
 import com.google.common.collect.AbstractIterator;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -23,6 +24,9 @@ import io.trino.filesystem.TrinoInputFile;
 import io.trino.parquet.ParquetDataSource;
 import io.trino.parquet.ParquetReaderOptions;
 import io.trino.parquet.reader.MetadataReader;
+import io.trino.plugin.deltalake.delete.PositionDeleteFilter;
+import io.trino.plugin.deltalake.delete.RowPredicate;
+import io.trino.plugin.deltalake.transactionlog.DeletionVectorEntry;
 import io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.ColumnMappingMode;
 import io.trino.plugin.hive.FileFormatDataSourceStats;
 import io.trino.plugin.hive.HiveColumnHandle;
@@ -34,6 +38,7 @@ import io.trino.plugin.hive.parquet.ParquetPageSourceFactory;
 import io.trino.plugin.hive.parquet.ParquetReaderConfig;
 import io.trino.plugin.hive.parquet.TrinoParquetDataSource;
 import io.trino.spi.Page;
+import io.trino.spi.TrinoException;
 import io.trino.spi.block.Block;
 import io.trino.spi.block.LongArrayBlock;
 import io.trino.spi.connector.ColumnHandle;
@@ -55,6 +60,7 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
 import org.joda.time.DateTimeZone;
+import org.roaringbitmap.RoaringBitmap;
 
 import javax.inject.Inject;
 
@@ -64,6 +70,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -72,7 +79,9 @@ import static com.google.common.collect.Iterables.getOnlyElement;
 import static io.airlift.slice.SizeOf.SIZE_OF_LONG;
 import static io.trino.plugin.deltalake.DeltaHiveTypeTranslator.toHiveType;
 import static io.trino.plugin.deltalake.DeltaLakeColumnHandle.ROW_ID_COLUMN_NAME;
+import static io.trino.plugin.deltalake.DeltaLakeColumnHandle.rowIdColumnHandle;
 import static io.trino.plugin.deltalake.DeltaLakeColumnType.REGULAR;
+import static io.trino.plugin.deltalake.DeltaLakeErrorCode.DELTA_LAKE_INVALID_SCHEMA;
 import static io.trino.plugin.deltalake.DeltaLakeSessionProperties.getParquetMaxReadBlockRowCount;
 import static io.trino.plugin.deltalake.DeltaLakeSessionProperties.getParquetMaxReadBlockSize;
 import static io.trino.plugin.deltalake.DeltaLakeSessionProperties.isParquetOptimizedNestedReaderEnabled;
@@ -80,6 +89,7 @@ import static io.trino.plugin.deltalake.DeltaLakeSessionProperties.isParquetOpti
 import static io.trino.plugin.deltalake.DeltaLakeSessionProperties.isParquetUseColumnIndex;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.extractSchema;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.getColumnMappingMode;
+import static io.trino.plugin.deltalake.util.DeletionVectors.readDeletionVectors;
 import static io.trino.plugin.hive.parquet.ParquetPageSourceFactory.PARQUET_ROW_INDEX_COLUMN;
 import static io.trino.spi.block.PageBuilderStatus.DEFAULT_MAX_PAGE_SIZE_IN_BYTES;
 import static java.lang.Math.min;
@@ -135,6 +145,11 @@ public class DeltaLakePageSourceProvider
                 .map(DeltaLakeColumnHandle.class::cast)
                 .collect(toImmutableList());
 
+        List<DeltaLakeColumnHandle> requiredColumns = ImmutableList.<DeltaLakeColumnHandle>builderWithExpectedSize(deltaLakeColumns.size() + 1)
+                .addAll(deltaLakeColumns)
+                .add(rowIdColumnHandle())
+                .build();
+
         List<DeltaLakeColumnHandle> regularColumns = deltaLakeColumns.stream()
                 .filter(column -> (column.getColumnType() == REGULAR) || column.getBaseColumnName().equals(ROW_ID_COLUMN_NAME))
                 .collect(toImmutableList());
@@ -167,6 +182,7 @@ public class DeltaLakePageSourceProvider
         if (filteredSplitPredicate.isAll() &&
                 split.getStart() == 0 && split.getLength() == split.getFileSize() &&
                 split.getFileRowCount().isPresent() &&
+                split.getDeletionVector().isEmpty() &&
                 (regularColumns.isEmpty() || onlyRowIdColumn(regularColumns))) {
             return new DeltaLakePageSource(
                     deltaLakeColumns,
@@ -177,7 +193,8 @@ public class DeltaLakePageSourceProvider
                     Optional.empty(),
                     split.getPath(),
                     split.getFileSize(),
-                    split.getFileModifiedTime());
+                    split.getFileModifiedTime(),
+                    Optional::empty);
         }
 
         Location location = Location.of(split.getPath());
@@ -202,6 +219,9 @@ public class DeltaLakePageSourceProvider
                     hiveColumnHandles::add,
                     () -> missingColumnNames.add(column.getBaseColumnName()));
         }
+        if (split.getDeletionVector().isPresent() && !regularColumns.contains(rowIdColumnHandle())) {
+            hiveColumnHandles.add(PARQUET_ROW_INDEX_COLUMN);
+        }
 
         TupleDomain<HiveColumnHandle> parquetPredicate = getParquetTupleDomain(filteredSplitPredicate.simplify(domainCompactionThreshold), columnMappingMode, parquetFieldIdToName);
 
@@ -225,6 +245,14 @@ public class DeltaLakePageSourceProvider
                         column -> ((HiveColumnHandle) column).getType(),
                         HivePageSourceProvider::getProjection));
 
+        Supplier<Optional<RowPredicate>> deletePredicate = Suppliers.memoize(() -> {
+            if (split.getDeletionVector().isEmpty()) {
+                return Optional.empty();
+            }
+            PositionDeleteFilter deleteFilter = readDeletes(session, location.parentDirectory(), split.getDeletionVector().get());
+            return Optional.of(deleteFilter.createPredicate(requiredColumns));
+        });
+
         return new DeltaLakePageSource(
                 deltaLakeColumns,
                 missingColumnNames.build(),
@@ -234,7 +262,29 @@ public class DeltaLakePageSourceProvider
                 projectionsAdapter,
                 split.getPath(),
                 split.getFileSize(),
-                split.getFileModifiedTime());
+                split.getFileModifiedTime(),
+                deletePredicate);
+    }
+
+    private PositionDeleteFilter readDeletes(
+            ConnectorSession session,
+            Location location,
+            DeletionVectorEntry deletionVector)
+    {
+        try {
+            RoaringBitmap[] deletedRows = readDeletionVectors(
+                    fileSystemFactory.create(session),
+                    location,
+                    deletionVector.storageType(),
+                    deletionVector.pathOrInlineDv(),
+                    deletionVector.offset(),
+                    deletionVector.sizeInBytes(),
+                    deletionVector.cardinality());
+            return new PositionDeleteFilter(deletedRows);
+        }
+        catch (IOException e) {
+            throw new TrinoException(DELTA_LAKE_INVALID_SCHEMA, "Failed to read deletion vectors", e);
+        }
     }
 
     public Map<Integer, String> loadParquetIdAndNameMapping(TrinoInputFile inputFile, ParquetReaderOptions options)

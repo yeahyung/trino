@@ -45,7 +45,7 @@ public class TestDeltaLakeBasic
 {
     private static final List<String> PERSON_TABLES = ImmutableList.of(
             "person", "person_without_last_checkpoint", "person_without_old_jsons", "person_without_checkpoints");
-    private static final List<String> OTHER_TABLES = ImmutableList.of("no_column_stats");
+    private static final List<String> OTHER_TABLES = ImmutableList.of("no_column_stats", "deletion_vectors");
 
     @Override
     protected QueryRunner createQueryRunner()
@@ -115,6 +115,15 @@ public class TestDeltaLakeBasic
         // AS
         // SELECT 42 AS c_int, 'foo' AS c_str
         assertQuery("SELECT c_str FROM no_column_stats WHERE c_int = 42", "VALUES 'foo'");
+    }
+
+    /**
+     * @see databricks.deletion_vectors
+     */
+    @Test
+    public void testDeletionVectors()
+    {
+        assertQuery("SELECT * FROM deletion_vectors", "VALUES (1, 11)");
     }
 
     @Test

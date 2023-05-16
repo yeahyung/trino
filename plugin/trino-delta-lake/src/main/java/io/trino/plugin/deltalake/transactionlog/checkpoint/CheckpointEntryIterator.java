@@ -379,7 +379,8 @@ public class CheckpointEntryIterator
                     dataChange,
                     Optional.empty(),
                     Optional.of(parseStatisticsFromParquet(addEntryBlock.getObject(6, Block.class))),
-                    tags);
+                    tags,
+                    Optional.empty());
         }
         else if (!addEntryBlock.isNull(5)) {
             result = new AddFileEntry(
@@ -390,7 +391,8 @@ public class CheckpointEntryIterator
                     dataChange,
                     Optional.of(getString(addEntryBlock, 5)),
                     Optional.empty(),
-                    tags);
+                    tags,
+                    Optional.empty());
         }
         else {
             result = new AddFileEntry(
@@ -401,7 +403,8 @@ public class CheckpointEntryIterator
                     dataChange,
                     Optional.empty(),
                     Optional.empty(),
-                    tags);
+                    tags,
+                    Optional.empty());
         }
 
         log.debug("Result: %s", result);
