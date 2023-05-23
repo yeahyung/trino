@@ -230,6 +230,16 @@ public abstract class BaseRaptorConnectorTest
     }
 
     @Test
+    public void testInsertTableNameInExplain()
+    {
+        // TODO Add table name to RaptorInsertTableHandle
+        try (TestTable table = new TestTable(getQueryRunner()::execute, "test_insert_explain", "(col INTEGER)")) {
+            assertThat((String) computeScalar("EXPLAIN INSERT INTO " + table.getName() + " VALUES 1"))
+                    .doesNotContain(table.getName());
+        }
+    }
+
+    @Test
     public void testInsertSelectDecimal()
     {
         assertUpdate("CREATE TABLE test_decimal(short_decimal DECIMAL(5,2), long_decimal DECIMAL(25,20))");
