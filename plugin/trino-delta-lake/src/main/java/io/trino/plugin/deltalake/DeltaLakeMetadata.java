@@ -1431,8 +1431,7 @@ public class DeltaLakeMetadata
         try {
             TrinoFileSystem fileSystem = fileSystemFactory.create(session);
             return new DeltaLakeInsertTableHandle(
-                    table.getSchemaName(),
-                    table.getTableName(),
+                    table.getSchemaTableName(),
                     tableLocation,
                     table.getMetadataEntry(),
                     inputColumns,
@@ -1502,7 +1501,7 @@ public class DeltaLakeMetadata
 
             transactionLogWriter.flush();
             writeCommitted = true;
-            writeCheckpointIfNeeded(session, new SchemaTableName(handle.getSchemaName(), handle.getTableName()), handle.getLocation(), checkpointInterval, commitVersion);
+            writeCheckpointIfNeeded(session, handle.getTableName(), handle.getLocation(), checkpointInterval, commitVersion);
 
             if (isCollectExtendedStatisticsColumnStatisticsOnWrite(session) && !computedStatistics.isEmpty() && !dataFileInfos.isEmpty()) {
                 // TODO (https://github.com/trinodb/trino/issues/16088) Add synchronization when version conflict for INSERT is resolved.
@@ -1513,7 +1512,7 @@ public class DeltaLakeMetadata
                 updateTableStatistics(
                         session,
                         Optional.empty(),
-                        handle.getSchemaTableName(),
+                        handle.getTableName(),
                         handle.getLocation(),
                         maxFileModificationTime,
                         computedStatistics,
