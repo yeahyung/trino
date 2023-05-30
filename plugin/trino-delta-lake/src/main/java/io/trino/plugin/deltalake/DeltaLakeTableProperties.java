@@ -14,6 +14,7 @@
 package io.trino.plugin.deltalake;
 
 import com.google.common.collect.ImmutableList;
+import io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.ColumnMappingMode;
 import io.trino.spi.TrinoException;
 import io.trino.spi.session.PropertyMetadata;
 import io.trino.spi.type.ArrayType;
@@ -28,6 +29,7 @@ import java.util.Optional;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.trino.spi.StandardErrorCode.INVALID_TABLE_PROPERTY;
 import static io.trino.spi.session.PropertyMetadata.booleanProperty;
+import static io.trino.spi.session.PropertyMetadata.enumProperty;
 import static io.trino.spi.session.PropertyMetadata.longProperty;
 import static io.trino.spi.session.PropertyMetadata.stringProperty;
 import static io.trino.spi.type.VarcharType.VARCHAR;
@@ -40,6 +42,7 @@ public class DeltaLakeTableProperties
     public static final String PARTITIONED_BY_PROPERTY = "partitioned_by";
     public static final String CHECKPOINT_INTERVAL_PROPERTY = "checkpoint_interval";
     public static final String CHANGE_DATA_FEED_ENABLED_PROPERTY = "change_data_feed_enabled";
+    public static final String COLUMN_MAPPING_MODE_PROPERTY = "column_mapping_mode";
 
     private final List<PropertyMetadata<?>> tableProperties;
 
@@ -73,6 +76,18 @@ public class DeltaLakeTableProperties
                         CHANGE_DATA_FEED_ENABLED_PROPERTY,
                         "Enables storing change data feed entries",
                         null,
+                        false))
+                .add(enumProperty(
+                        COLUMN_MAPPING_MODE_PROPERTY,
+                        "Column mapping mode",
+                        ColumnMappingMode.class,
+                        // TODO: Consider using 'name' by default. 'none' column mapping doesn't support some statements
+                        ColumnMappingMode.NONE,
+                        value -> {
+                            if (value != ColumnMappingMode.ID && value != ColumnMappingMode.NAME && value != ColumnMappingMode.NONE) {
+                                throw new TrinoException(INVALID_TABLE_PROPERTY, "Unsupported column mapping mode: UNKNOWN");
+                            }
+                        },
                         false))
                 .build();
     }
@@ -108,5 +123,10 @@ public class DeltaLakeTableProperties
     public static Optional<Boolean> getChangeDataFeedEnabled(Map<String, Object> tableProperties)
     {
         return Optional.ofNullable((Boolean) tableProperties.get(CHANGE_DATA_FEED_ENABLED_PROPERTY));
+    }
+
+    public static ColumnMappingMode getColumnMappingMode(Map<String, Object> tableProperties)
+    {
+        return ColumnMappingMode.valueOf(tableProperties.get(COLUMN_MAPPING_MODE_PROPERTY).toString().toUpperCase(ENGLISH));
     }
 }
