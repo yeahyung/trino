@@ -835,9 +835,6 @@ public class TrinoS3FileSystem
     private Iterator<ListObjectsV2Result> listObjects(Path path, OptionalInt initialMaxKeys, boolean recursive)
     {
         String key = keyFromPath(path);
-        if (!key.isEmpty()) {
-            key += PATH_SEPARATOR;
-        }
 
         ListObjectsV2Request request = new ListObjectsV2Request()
                 .withBucketName(getBucketName(uri))
@@ -847,7 +844,7 @@ public class TrinoS3FileSystem
                 .withRequesterPays(requesterPaysEnabled);
 
         STATS.newListObjectsCall();
-        return new AbstractSequentialIterator<>(s3.listObjectsV2(request))
+        return new AbstractSequentialIterator<>(listObjectsV2ExceptUnnecessarilyAddedKeys(request, key))
         {
             @Override
             protected ListObjectsV2Result computeNext(ListObjectsV2Result previous)
@@ -857,9 +854,27 @@ public class TrinoS3FileSystem
                 }
                 // Clear any max keys after the first batch completes
                 request.withMaxKeys(null).setContinuationToken(previous.getNextContinuationToken());
-                return s3.listObjectsV2(request);
+                return listObjectsV2ExceptUnnecessarilyAddedKeys(request, key);
             }
         };
+    }
+
+    /*
+      object 조회 시, PATH_SEPARATOR 를 붙이지 않기 때문에 추가적으로 조회될 수 있는 object 목록들은 제외한다.
+      ex) key가 scan-test/movie.csv 일 경우
+          PATH_SEPARATOR 를 붙인 경우 scan-test/movie.csv2 같은 파일은 조회되지 않아야한다.
+      object의 key가 table location(key)와 동일하지 않고 key 하위 폴더에 있는 파일들이 아니라면 제외시켜야한다.
+     */
+    private ListObjectsV2Result listObjectsV2ExceptUnnecessarilyAddedKeys(ListObjectsV2Request request, String key)
+    {
+        String keyWithPathSeparator = key + PATH_SEPARATOR;
+        ListObjectsV2Result listObjectsV2Result = s3.listObjectsV2(request);
+
+        List<S3ObjectSummary> unnecessaryObjectLists = listObjectsV2Result.getObjectSummaries().stream()
+                .filter(objectKey -> !objectKey.getKey().equals(key) && !objectKey.getKey().startsWith(keyWithPathSeparator))
+                .toList();
+        listObjectsV2Result.getObjectSummaries().removeAll(unnecessaryObjectLists);
+        return listObjectsV2Result;
     }
 
     private Iterator<LocatedFileStatus> statusFromListing(ListObjectsV2Result listing)
