@@ -114,7 +114,7 @@
         <module>core/trino-server-main</module>
         <module>core/trino-server-rpm</module>
         <module>core/trino-spi</module>
-        <module>docs</module>
+<!--        <module>docs</module>-->
         <module>lib/trino-array</module>
         <module>lib/trino-collect</module>
         <module>lib/trino-filesystem</module>
