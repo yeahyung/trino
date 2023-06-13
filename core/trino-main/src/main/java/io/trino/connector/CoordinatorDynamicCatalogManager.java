@@ -177,6 +177,7 @@ public class CoordinatorDynamicCatalogManager
     @Override
     public void ensureCatalogsLoaded(Session session, List<CatalogProperties> catalogs)
     {
+        log.info("custom: ensureCatalogsLoaded list<catalogProperties>: " + catalogs + ", inMemory Active Catalogs: " + activeCatalogs + ", All Catalogs: " + allCatalogs);
         List<CatalogProperties> missingCatalogs = catalogs.stream()
                 .filter(catalog -> !allCatalogs.containsKey(catalog.getCatalogHandle()))
                 .collect(toImmutableList());

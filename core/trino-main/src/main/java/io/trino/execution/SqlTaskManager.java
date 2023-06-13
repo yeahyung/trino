@@ -500,6 +500,8 @@ public class SqlTaskManager
         requireNonNull(splitAssignments, "splitAssignments is null");
         requireNonNull(outputBuffers, "outputBuffers is null");
 
+        fragment.ifPresent(planFragment -> log.info("custom: SqlTaskManager doUpdateTask fragment: " + planFragment));
+
         SqlTask sqlTask = tasks.getUnchecked(taskId);
         QueryContext queryContext = sqlTask.getQueryContext();
         if (!queryContext.isMemoryLimitsInitialized()) {

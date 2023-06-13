@@ -179,6 +179,7 @@ public class StaticCatalogManager
     @Override
     public void ensureCatalogsLoaded(Session session, List<CatalogProperties> catalogs)
     {
+        log.info("custom: ensureCatalogsLoaded catalogs: " + catalogs + ", inMemory Catalogs: " + catalogs);
         List<CatalogProperties> missingCatalogs = catalogs.stream()
                 .filter(catalog -> !this.catalogs.containsKey(catalog.getCatalogHandle().getCatalogName()))
                 .collect(toImmutableList());
@@ -192,6 +193,7 @@ public class StaticCatalogManager
     public void pruneCatalogs(Set<CatalogHandle> catalogsInUse)
     {
         // static catalogs do not need management
+        log.info("custom: pruneCatalogs catalogsInUse: " + catalogsInUse + ", inMemory Catalogs: " + catalogs);
     }
 
     @Override

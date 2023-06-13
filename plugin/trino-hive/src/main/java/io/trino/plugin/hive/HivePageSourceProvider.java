@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.inject.Inject;
+import io.airlift.log.Logger;
 import io.trino.filesystem.Location;
 import io.trino.hdfs.HdfsContext;
 import io.trino.hdfs.HdfsEnvironment;
@@ -81,6 +82,8 @@ import static java.util.stream.Collectors.toList;
 public class HivePageSourceProvider
         implements ConnectorPageSourceProvider
 {
+    private static final Logger log = Logger.get(HivePageSourceProvider.class);
+
     // The original file path looks like this: /root/dir/nnnnnnn_m(_copy_ccc)?
     private static final Pattern ORIGINAL_FILE_PATH_MATCHER = Pattern.compile("(?s)(?<rootDir>.*)/(?<filename>(?<bucketNumber>\\d+)_(?<rest>.*)?)$");
 
@@ -118,6 +121,7 @@ public class HivePageSourceProvider
             List<ColumnHandle> columns,
             DynamicFilter dynamicFilter)
     {
+        log.info("custom: createPageSource tableHandle.getClassLoader : " + Integer.toHexString(System.identityHashCode(tableHandle.getClass().getClassLoader())));
         HiveTableHandle hiveTable = (HiveTableHandle) tableHandle;
         HiveSplit hiveSplit = (HiveSplit) split;
 

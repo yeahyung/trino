@@ -88,6 +88,7 @@ public class WorkerDynamicCatalogManager
     @Override
     public void ensureCatalogsLoaded(Session session, List<CatalogProperties> expectedCatalogs)
     {
+        log.info("custom: WorkerDynamicCatalogManager ensureCatalogsLoaded : " + expectedCatalogs);
         if (getMissingCatalogs(expectedCatalogs).isEmpty()) {
             return;
         }

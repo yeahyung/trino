@@ -14,6 +14,7 @@
 package io.trino.connector;
 
 import com.google.inject.Inject;
+import io.airlift.log.Logger;
 import io.airlift.node.NodeInfo;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Tracer;
@@ -59,6 +60,8 @@ import static java.util.Objects.requireNonNull;
 public class DefaultCatalogFactory
         implements CatalogFactory
 {
+    private static final Logger log = Logger.get(DefaultCatalogFactory.class);
+
     private final Metadata metadata;
     private final AccessControl accessControl;
     private final HandleResolver handleResolver;
@@ -291,6 +294,7 @@ public class DefaultCatalogFactory
             }
 
             if (classLoader instanceof PluginClassLoader) {
+                log.info("custom: registerClassLoader: classLoader: " + classLoader);
                 handleResolver.registerClassLoader((PluginClassLoader) classLoader);
             }
             return classLoader;
@@ -305,6 +309,7 @@ public class DefaultCatalogFactory
                 destroyed = true;
             }
             if (classLoader instanceof PluginClassLoader) {
+                log.info("custom: unregisterClassLoader: classLoaderId: " + ((PluginClassLoader) classLoader).getId() + ", classLoader: " + classLoader);
                 handleResolver.unregisterClassLoader((PluginClassLoader) classLoader);
             }
         }

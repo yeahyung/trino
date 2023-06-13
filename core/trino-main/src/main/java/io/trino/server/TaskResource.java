@@ -145,6 +145,8 @@ public class TaskResource
     {
         requireNonNull(taskUpdateRequest, "taskUpdateRequest is null");
 
+        log.info("custom: TaskResource: createOrUpdateTask" + taskUpdateRequest);
+
         Session session = taskUpdateRequest.getSession().toSession(sessionPropertyManager, taskUpdateRequest.getExtraCredentials(), taskUpdateRequest.getExchangeEncryptionKey());
 
         if (injectFailure(session.getTraceToken(), taskId, RequestType.CREATE_OR_UPDATE_TASK, asyncResponse)) {
