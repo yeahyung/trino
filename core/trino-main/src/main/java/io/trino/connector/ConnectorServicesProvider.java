@@ -28,4 +28,6 @@ public interface ConnectorServicesProvider
     void pruneCatalogs(Set<CatalogHandle> catalogsInUse);
 
     ConnectorServices getConnectorServices(CatalogHandle catalogHandle);
+
+    void syncCatalogs(List<CatalogProperties> catalogsInCoordinator);
 }

@@ -140,7 +140,6 @@ public class CoordinatorDynamicCatalogManager
                                     CatalogConnector newCatalog = catalogFactory.createCatalog(catalog);
                                     activeCatalogs.put(catalog.getCatalogHandle().getCatalogName(), newCatalog.getCatalog());
                                     allCatalogs.put(catalog.getCatalogHandle(), newCatalog);
-                                    //catalogSyncTask.syncCatalogs();
                                     log.info("-- Added catalog %s using connector %s --", storedCatalog.getName(), catalog.getConnectorName());
                                 }
                                 catch (Throwable e) {
@@ -276,7 +275,7 @@ public class CoordinatorDynamicCatalogManager
                     handle -> catalogFactory.createCatalog(catalogProperties));
             activeCatalogs.put(catalogName, catalog.getCatalog());
             catalogStore.addOrReplaceCatalog(catalogProperties);
-            catalogSyncTask.syncCatalogs();
+            catalogSyncTask.syncCatalogs(ImmutableList.of(catalogProperties));
 
             log.info("Added catalog: %s", catalog.getCatalogHandle());
         }
@@ -328,5 +327,31 @@ public class CoordinatorDynamicCatalogManager
         }
         // Do not shut down the catalog, because there may still be running queries using this catalog.
         // Catalog shutdown logic will be added later.
+    }
+
+    @Override
+    public void syncCatalogs(List<CatalogProperties> catalogsInCoordinator)
+    {
+        catalogsUpdateLock.lock();
+        try {
+            if (state == State.STOPPED) {
+                return;
+            }
+
+            List<CatalogProperties> missingCatalogs = getMissingCatalogs(catalogsInCoordinator);
+            if (!missingCatalogs.isEmpty()) {
+                log.error("Missing Catalogs: %s", missingCatalogs);
+            }
+        }
+        finally {
+            catalogsUpdateLock.unlock();
+        }
+    }
+
+    private List<CatalogProperties> getMissingCatalogs(List<CatalogProperties> catalogsInCoordinator)
+    {
+        return catalogsInCoordinator.stream()
+                .filter(catalog -> !activeCatalogs.containsKey(catalog.getCatalogHandle().getCatalogName()))
+                .collect(toImmutableList());
     }
 }

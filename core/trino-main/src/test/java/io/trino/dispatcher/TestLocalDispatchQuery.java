@@ -177,6 +177,12 @@ public class TestLocalDispatchQuery
         {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public void syncCatalogs(List<CatalogProperties> catalogsInCoordinator)
+        {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static class TestCreateTableTask

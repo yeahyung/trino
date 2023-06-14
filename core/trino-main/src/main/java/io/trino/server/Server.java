@@ -146,15 +146,17 @@ public class Server
             // Only static catalog manager announces catalogs
             // Connector event listeners are only supported for statically loaded catalogs
             // TODO: remove connector event listeners or add support for dynamic loading from connector
-            if (injector.getInstance(CatalogManagerConfig.class).getCatalogMangerKind() == CatalogMangerKind.STATIC) {
+            if (injector.getInstance(ServerConfig.class).isCoordinator()) {
                 CatalogManager catalogManager = injector.getInstance(CatalogManager.class);
-                addConnectorEventListeners(
-                        catalogManager,
-                        injector.getInstance(ConnectorServicesProvider.class),
-                        injector.getInstance(EventListenerManager.class));
+                if (injector.getInstance(CatalogManagerConfig.class).getCatalogMangerKind() == CatalogMangerKind.STATIC) {
+                    addConnectorEventListeners(
+                            catalogManager,
+                            injector.getInstance(ConnectorServicesProvider.class),
+                            injector.getInstance(EventListenerManager.class));
 
-                // TODO: remove this huge hack
-                updateConnectorIds(injector.getInstance(Announcer.class), catalogManager);
+                    // TODO: remove this huge hack
+                    updateConnectorIds(injector.getInstance(Announcer.class), catalogManager);
+                }
             }
 
             injector.getInstance(SessionPropertyDefaults.class).loadConfigurationManager();

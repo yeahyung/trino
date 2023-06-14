@@ -14,8 +14,6 @@
 package io.trino.connector;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.inject.Inject;
 import io.airlift.discovery.client.ServiceDescriptor;
 import io.airlift.discovery.client.ServiceSelector;
@@ -29,7 +27,6 @@ import io.airlift.log.Logger;
 import io.airlift.node.NodeInfo;
 import io.trino.metadata.ForNodeManager;
 import io.trino.server.InternalCommunicationConfig;
-import io.trino.spi.connector.CatalogHandle;
 import io.trino.transaction.TransactionManager;
 
 import java.net.URI;
@@ -50,7 +47,7 @@ public class DefaultCatalogSyncTask
         implements CatalogSyncTask
 {
     private static final Logger log = Logger.get(DefaultCatalogSyncTask.class);
-    private static final JsonCodec<List<CatalogHandle>> CATALOG_HANDLES_CODEC = listJsonCodec(CatalogHandle.class);
+    private static final JsonCodec<List<CatalogProperties>> CATALOG_PROPERTIES_CODEC = listJsonCodec(CatalogProperties.class);
 
     private final TransactionManager transactionManager;
     private final CoordinatorDynamicCatalogManager catalogManager;
@@ -79,13 +76,13 @@ public class DefaultCatalogSyncTask
     }
 
     @Override
-    public void syncCatalogs()
+    public void syncCatalogs(List<CatalogProperties> catalogsInCoordinator)
     {
-        syncWorkerCatalogs();
+        syncWorkerCatalogs(catalogsInCoordinator);
     }
 
     @VisibleForTesting
-    void syncWorkerCatalogs()
+    void syncWorkerCatalogs(List<CatalogProperties> catalogsInCoordinator)
     {
         Set<ServiceDescriptor> online = selector.selectAllServices().stream()
                 .filter(descriptor -> !nodeInfo.getNodeId().equals(descriptor.getNodeId()))
@@ -93,7 +90,6 @@ public class DefaultCatalogSyncTask
         log.info("syncWorkerCatalogs online: " + online);
 
         // send message to workers to trigger sync
-        List<CatalogHandle> activeCatalogs = getActiveCatalogs();
         for (ServiceDescriptor service : online) {
             URI uri = getHttpUri(service);
             if (uri == null) {
@@ -103,7 +99,7 @@ public class DefaultCatalogSyncTask
             Request request = preparePost()
                     .setUri(uri)
                     .addHeader(CONTENT_TYPE, JSON_UTF_8.toString())
-                    .setBodyGenerator(jsonBodyGenerator(CATALOG_HANDLES_CODEC, activeCatalogs))
+                    .setBodyGenerator(jsonBodyGenerator(CATALOG_PROPERTIES_CODEC, catalogsInCoordinator))
                     .build();
             httpClient.execute(request, new ResponseHandler<>()
             {
@@ -122,16 +118,6 @@ public class DefaultCatalogSyncTask
                 }
             });
         }
-    }
-
-    private List<CatalogHandle> getActiveCatalogs()
-    {
-        ImmutableSet.Builder<CatalogHandle> activeCatalogs = ImmutableSet.builder();
-        // all catalogs in an active transaction
-        transactionManager.getAllTransactionInfos().forEach(info -> activeCatalogs.addAll(info.getActiveCatalogs()));
-        // all catalogs currently associated with a name
-        activeCatalogs.addAll(catalogManager.getActiveCatalogs());
-        return ImmutableList.copyOf(activeCatalogs.build());
     }
 
     private URI getHttpUri(ServiceDescriptor descriptor)

@@ -609,5 +609,11 @@ public class TestSqlTaskManager
         {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public void syncCatalogs(List<CatalogProperties> catalogsInCoordinator)
+        {
+            throw new UnsupportedOperationException();
+        }
     }
 }

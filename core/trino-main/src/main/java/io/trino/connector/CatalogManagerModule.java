@@ -16,6 +16,7 @@ package io.trino.connector;
 import com.google.inject.Binder;
 import com.google.inject.Scopes;
 import io.airlift.configuration.AbstractConfigurationAwareModule;
+import io.trino.server.ServerConfig;
 
 public class CatalogManagerModule
         extends AbstractConfigurationAwareModule
@@ -24,11 +25,14 @@ public class CatalogManagerModule
     protected void setup(Binder binder)
     {
         binder.bind(DefaultCatalogFactory.class).in(Scopes.SINGLETON);
-        binder.bind(DefaultCatalogSyncTask.class).in(Scopes.SINGLETON);
         binder.bind(LazyCatalogFactory.class).in(Scopes.SINGLETON);
-        binder.bind(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
         binder.bind(CatalogFactory.class).to(LazyCatalogFactory.class).in(Scopes.SINGLETON);
-        binder.bind(CatalogSyncTask.class).to(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
+
+        if (buildConfigObject(ServerConfig.class).isCoordinator()) {
+            binder.bind(DefaultCatalogSyncTask.class).in(Scopes.SINGLETON);
+            binder.bind(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
+            binder.bind(CatalogSyncTask.class).to(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
+        }
 
         CatalogManagerConfig config = buildConfigObject(CatalogManagerConfig.class);
         switch (config.getCatalogMangerKind()) {

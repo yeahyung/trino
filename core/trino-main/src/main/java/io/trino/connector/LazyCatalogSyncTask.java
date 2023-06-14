@@ -13,6 +13,7 @@
  */
 package io.trino.connector;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -28,9 +29,9 @@ public class LazyCatalogSyncTask
     }
 
     @Override
-    public void syncCatalogs()
+    public void syncCatalogs(List<CatalogProperties> catalogsInCoordinator)
     {
-        getDelegate().syncCatalogs();
+        getDelegate().syncCatalogs(catalogsInCoordinator);
     }
 
     private DefaultCatalogSyncTask getDelegate()

@@ -89,17 +89,37 @@ public class WorkerDynamicCatalogManager
     public void ensureCatalogsLoaded(Session session, List<CatalogProperties> expectedCatalogs)
     {
         log.info("custom: WorkerDynamicCatalogManager ensureCatalogsLoaded : " + expectedCatalogs);
-        if (getMissingCatalogs(expectedCatalogs).isEmpty()) {
+
+        List<CatalogProperties> missingCatalogs = getMissingCatalogs(expectedCatalogs);
+        if (missingCatalogs.isEmpty()) {
             return;
         }
 
+        updateMissingCatalogs(missingCatalogs);
+    }
+
+    @Override
+    public void syncCatalogs(List<CatalogProperties> catalogsInCoordinator)
+    {
+        log.info("custom: WorkerDynamicCatalogManager syncCatalogs : " + catalogsInCoordinator);
+
+        List<CatalogProperties> missingCatalogs = getMissingCatalogs(catalogsInCoordinator);
+        if (missingCatalogs.isEmpty()) {
+            return;
+        }
+
+        updateMissingCatalogs(missingCatalogs);
+    }
+
+    private void updateMissingCatalogs(List<CatalogProperties> missingCatalogs)
+    {
         catalogsUpdateLock.lock();
         try {
             if (stopped) {
                 return;
             }
 
-            for (CatalogProperties catalog : getMissingCatalogs(expectedCatalogs)) {
+            for (CatalogProperties catalog : missingCatalogs) {
                 checkArgument(!catalog.getCatalogHandle().equals(GlobalSystemConnector.CATALOG_HANDLE), "Global system catalog not registered");
                 CatalogConnector newCatalog = catalogFactory.createCatalog(catalog);
                 catalogs.put(catalog.getCatalogHandle(), newCatalog);

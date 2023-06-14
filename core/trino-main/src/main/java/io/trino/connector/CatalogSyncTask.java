@@ -15,8 +15,10 @@ package io.trino.connector;
 
 import javax.annotation.concurrent.ThreadSafe;
 
+import java.util.List;
+
 @ThreadSafe
 public interface CatalogSyncTask
 {
-    void syncCatalogs();
+    void syncCatalogs(List<CatalogProperties> catalogsInCoordinator);
 }

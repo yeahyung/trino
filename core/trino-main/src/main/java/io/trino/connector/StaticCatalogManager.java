@@ -232,4 +232,10 @@ public class StaticCatalogManager
     {
         throw new TrinoException(NOT_SUPPORTED, "DROP CATALOG is not supported by the static catalog store");
     }
+
+    @Override
+    public void syncCatalogs(List<CatalogProperties> catalogsInCoordinator)
+    {
+        log.debug("Do nothing on syncCatalogs with static catalog manager");
+    }
 }
