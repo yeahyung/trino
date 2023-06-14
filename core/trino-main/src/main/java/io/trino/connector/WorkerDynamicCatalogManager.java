@@ -18,6 +18,7 @@ import com.google.inject.Inject;
 import io.airlift.log.Logger;
 import io.trino.Session;
 import io.trino.connector.system.GlobalSystemConnector;
+import io.trino.server.ForStartup;
 import io.trino.spi.connector.CatalogHandle;
 
 import javax.annotation.PreDestroy;
@@ -29,13 +30,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.trino.util.Executors.executeUntilFailure;
 import static java.util.Objects.requireNonNull;
 
 @ThreadSafe
@@ -44,18 +49,24 @@ public class WorkerDynamicCatalogManager
 {
     private static final Logger log = Logger.get(WorkerDynamicCatalogManager.class);
 
+    private enum State { CREATED, INITIALIZED, STOPPED }
+
+    private final CatalogStore catalogStore;
     private final CatalogFactory catalogFactory;
+    private final Executor executor;
 
     private final Lock catalogsUpdateLock = new ReentrantLock();
     private final ConcurrentMap<CatalogHandle, CatalogConnector> catalogs = new ConcurrentHashMap<>();
 
     @GuardedBy("catalogsUpdateLock")
-    private boolean stopped;
+    private State state = State.CREATED;
 
     @Inject
-    public WorkerDynamicCatalogManager(CatalogFactory catalogFactory)
+    public WorkerDynamicCatalogManager(CatalogStore catalogStore, CatalogFactory catalogFactory, @ForStartup Executor executor)
     {
+        this.catalogStore = requireNonNull(catalogStore, "catalogStore is null");
         this.catalogFactory = requireNonNull(catalogFactory, "catalogFactory is null");
+        this.executor = requireNonNull(executor, "executor is null");
     }
 
     @PreDestroy
@@ -65,10 +76,10 @@ public class WorkerDynamicCatalogManager
 
         catalogsUpdateLock.lock();
         try {
-            if (stopped) {
+            if (state == State.STOPPED) {
                 return;
             }
-            stopped = true;
+            state = State.STOPPED;
 
             catalogs = ImmutableList.copyOf(this.catalogs.values());
             this.catalogs.clear();
@@ -83,7 +94,39 @@ public class WorkerDynamicCatalogManager
     }
 
     @Override
-    public void loadInitialCatalogs() {}
+    public void loadInitialCatalogs()
+    {
+        catalogsUpdateLock.lock();
+        try {
+            if (state == State.INITIALIZED) {
+                return;
+            }
+            checkState(state != State.STOPPED, "Worker Node is stopped");
+            state = State.INITIALIZED;
+
+            executeUntilFailure(
+                    executor,
+                    catalogStore.getCatalogs().stream()
+                            .map(storedCatalog -> (Callable<?>) () -> {
+                                CatalogProperties catalog = null;
+                                try {
+                                    catalog = storedCatalog.loadProperties();
+                                    CatalogConnector newCatalog = catalogFactory.createCatalog(catalog);
+                                    catalogs.put(catalog.getCatalogHandle(), newCatalog);
+                                    log.info("-- Added catalog %s using connector %s --", storedCatalog.getName(), catalog.getConnectorName());
+                                }
+                                catch (Throwable e) {
+                                    ConnectorName connectorName = catalog != null ? catalog.getConnectorName() : new ConnectorName("unknown");
+                                    log.error(e, "-- Failed to load catalog %s using connector %s --", storedCatalog.getName(), connectorName);
+                                }
+                                return null;
+                            })
+                            .collect(toImmutableList()));
+        }
+        finally {
+            catalogsUpdateLock.unlock();
+        }
+    }
 
     @Override
     public void ensureCatalogsLoaded(Session session, List<CatalogProperties> expectedCatalogs)
@@ -115,7 +158,7 @@ public class WorkerDynamicCatalogManager
     {
         catalogsUpdateLock.lock();
         try {
-            if (stopped) {
+            if (state == State.STOPPED) {
                 return;
             }
 
@@ -123,6 +166,7 @@ public class WorkerDynamicCatalogManager
                 checkArgument(!catalog.getCatalogHandle().equals(GlobalSystemConnector.CATALOG_HANDLE), "Global system catalog not registered");
                 CatalogConnector newCatalog = catalogFactory.createCatalog(catalog);
                 catalogs.put(catalog.getCatalogHandle(), newCatalog);
+                catalogStore.addOrReplaceCatalog(catalog);
                 log.info("Added catalog: " + catalog.getCatalogHandle());
             }
         }
@@ -137,9 +181,10 @@ public class WorkerDynamicCatalogManager
         List<CatalogConnector> removedCatalogs = new ArrayList<>();
         catalogsUpdateLock.lock();
         try {
-            if (stopped) {
+            if (state == State.STOPPED) {
                 return;
             }
+
             Iterator<Entry<CatalogHandle, CatalogConnector>> iterator = catalogs.entrySet().iterator();
             while (iterator.hasNext()) {
                 Entry<CatalogHandle, CatalogConnector> entry = iterator.next();
@@ -157,6 +202,7 @@ public class WorkerDynamicCatalogManager
         for (CatalogConnector removedCatalog : removedCatalogs) {
             try {
                 removedCatalog.shutdown();
+                catalogStore.removeCatalog(removedCatalog.getCatalog().getCatalogName());
             }
             catch (Throwable e) {
                 log.error(e, "Error shutting down catalog: %s".formatted(removedCatalog));
@@ -189,7 +235,7 @@ public class WorkerDynamicCatalogManager
 
         catalogsUpdateLock.lock();
         try {
-            if (stopped) {
+            if (state == State.STOPPED) {
                 return;
             }
 

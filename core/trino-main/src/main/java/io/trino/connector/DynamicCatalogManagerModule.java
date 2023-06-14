@@ -29,16 +29,16 @@ public class DynamicCatalogManagerModule
     @Override
     protected void setup(Binder binder)
     {
+        CatalogStoreConfig config = buildConfigObject(CatalogStoreConfig.class);
+        switch (config.getCatalogStoreKind()) {
+            case MEMORY -> binder.bind(CatalogStore.class).to(InMemoryCatalogStore.class).in(Scopes.SINGLETON);
+            case FILE -> {
+                configBinder(binder).bindConfig(FileCatalogStoreConfig.class);
+                binder.bind(CatalogStore.class).to(FileCatalogStore.class).in(Scopes.SINGLETON);
+            }
+        }
         if (buildConfigObject(ServerConfig.class).isCoordinator()) {
             binder.bind(CoordinatorDynamicCatalogManager.class).in(Scopes.SINGLETON);
-            CatalogStoreConfig config = buildConfigObject(CatalogStoreConfig.class);
-            switch (config.getCatalogStoreKind()) {
-                case MEMORY -> binder.bind(CatalogStore.class).to(InMemoryCatalogStore.class).in(Scopes.SINGLETON);
-                case FILE -> {
-                    configBinder(binder).bindConfig(FileCatalogStoreConfig.class);
-                    binder.bind(CatalogStore.class).to(FileCatalogStore.class).in(Scopes.SINGLETON);
-                }
-            }
             binder.bind(ConnectorServicesProvider.class).to(CoordinatorDynamicCatalogManager.class).in(Scopes.SINGLETON);
             binder.bind(CatalogManager.class).to(CoordinatorDynamicCatalogManager.class).in(Scopes.SINGLETON);
             binder.bind(CoordinatorLazyRegister.class).asEagerSingleton();
