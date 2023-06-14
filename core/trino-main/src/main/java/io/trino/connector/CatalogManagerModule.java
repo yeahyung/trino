@@ -24,8 +24,11 @@ public class CatalogManagerModule
     protected void setup(Binder binder)
     {
         binder.bind(DefaultCatalogFactory.class).in(Scopes.SINGLETON);
+        binder.bind(DefaultCatalogSyncTask.class).in(Scopes.SINGLETON);
         binder.bind(LazyCatalogFactory.class).in(Scopes.SINGLETON);
+        binder.bind(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
         binder.bind(CatalogFactory.class).to(LazyCatalogFactory.class).in(Scopes.SINGLETON);
+        binder.bind(CatalogSyncTask.class).to(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
 
         CatalogManagerConfig config = buildConfigObject(CatalogManagerConfig.class);
         switch (config.getCatalogMangerKind()) {

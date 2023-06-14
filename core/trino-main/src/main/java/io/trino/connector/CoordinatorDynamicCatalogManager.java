@@ -67,6 +67,7 @@ public class CoordinatorDynamicCatalogManager
 
     private final CatalogStore catalogStore;
     private final CatalogFactory catalogFactory;
+    private final CatalogSyncTask catalogSyncTask;
     private final Executor executor;
 
     private final Lock catalogsUpdateLock = new ReentrantLock();
@@ -85,10 +86,11 @@ public class CoordinatorDynamicCatalogManager
     private State state = State.CREATED;
 
     @Inject
-    public CoordinatorDynamicCatalogManager(CatalogStore catalogStore, CatalogFactory catalogFactory, @ForStartup Executor executor)
+    public CoordinatorDynamicCatalogManager(CatalogStore catalogStore, CatalogFactory catalogFactory, CatalogSyncTask catalogSyncTask, @ForStartup Executor executor)
     {
         this.catalogStore = requireNonNull(catalogStore, "catalogStore is null");
         this.catalogFactory = requireNonNull(catalogFactory, "catalogFactory is null");
+        this.catalogSyncTask = requireNonNull(catalogSyncTask, "catalogSyncTask is null");
         this.executor = requireNonNull(executor, "executor is null");
     }
 
@@ -138,6 +140,7 @@ public class CoordinatorDynamicCatalogManager
                                     CatalogConnector newCatalog = catalogFactory.createCatalog(catalog);
                                     activeCatalogs.put(catalog.getCatalogHandle().getCatalogName(), newCatalog.getCatalog());
                                     allCatalogs.put(catalog.getCatalogHandle(), newCatalog);
+                                    //catalogSyncTask.syncCatalogs();
                                     log.info("-- Added catalog %s using connector %s --", storedCatalog.getName(), catalog.getConnectorName());
                                 }
                                 catch (Throwable e) {
@@ -273,6 +276,7 @@ public class CoordinatorDynamicCatalogManager
                     handle -> catalogFactory.createCatalog(catalogProperties));
             activeCatalogs.put(catalogName, catalog.getCatalog());
             catalogStore.addOrReplaceCatalog(catalogProperties);
+            catalogSyncTask.syncCatalogs();
 
             log.info("Added catalog: %s", catalog.getCatalogHandle());
         }
