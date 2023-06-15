@@ -166,7 +166,7 @@ public class WorkerDynamicCatalogManager
                 checkArgument(!catalog.getCatalogHandle().equals(GlobalSystemConnector.CATALOG_HANDLE), "Global system catalog not registered");
                 CatalogConnector newCatalog = catalogFactory.createCatalog(catalog);
                 catalogs.put(catalog.getCatalogHandle(), newCatalog);
-                catalogStore.addOrReplaceCatalog(catalog);
+                //catalogStore.addOrReplaceCatalog(catalog);
                 log.info("Added catalog: " + catalog.getCatalogHandle());
             }
         }
