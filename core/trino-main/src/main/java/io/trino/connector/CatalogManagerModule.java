@@ -28,16 +28,17 @@ public class CatalogManagerModule
         binder.bind(LazyCatalogFactory.class).in(Scopes.SINGLETON);
         binder.bind(CatalogFactory.class).to(LazyCatalogFactory.class).in(Scopes.SINGLETON);
 
-        if (buildConfigObject(ServerConfig.class).isCoordinator()) {
-            binder.bind(DefaultCatalogSyncTask.class).in(Scopes.SINGLETON);
-            binder.bind(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
-            binder.bind(CatalogSyncTask.class).to(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
-        }
-
         CatalogManagerConfig config = buildConfigObject(CatalogManagerConfig.class);
         switch (config.getCatalogMangerKind()) {
             case STATIC -> install(new StaticCatalogManagerModule());
-            case DYNAMIC -> install(new DynamicCatalogManagerModule());
+            case DYNAMIC -> {
+                if (buildConfigObject(ServerConfig.class).isCoordinator()) {
+                    binder.bind(DefaultCatalogSyncTask.class).in(Scopes.SINGLETON);
+                    binder.bind(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
+                    binder.bind(CatalogSyncTask.class).to(LazyCatalogSyncTask.class).in(Scopes.SINGLETON);
+                }
+                install(new DynamicCatalogManagerModule());
+            }
         }
 
         install(new CatalogServiceProviderModule());
