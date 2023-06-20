@@ -101,12 +101,12 @@ public class DefaultCatalogSyncTask
                     .addHeader(CONTENT_TYPE, JSON_UTF_8.toString())
                     .setBodyGenerator(jsonBodyGenerator(CATALOG_PROPERTIES_CODEC, catalogsInCoordinator))
                     .build();
-            httpClient.execute(request, new ResponseHandler<>()
+            httpClient.executeAsync(request, new ResponseHandler<>()
             {
                 @Override
                 public Exception handleException(Request request, Exception exception)
                 {
-                    log.debug(exception, "Error syncing catalogs on server: %s", request.getUri());
+                    log.error(exception, "Error syncing catalogs with request: %s", request);
                     return exception;
                 }
 
